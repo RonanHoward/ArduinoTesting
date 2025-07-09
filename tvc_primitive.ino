@@ -1,6 +1,6 @@
 /******************************************************************************
 
-Proportional Correction Test V0R1
+Proportional Correction Test V0R2
 JULY 2025 (c) Concept Propulsion.  All Rights Reserved.
 R. HOWARD
 
@@ -30,8 +30,8 @@ SCK~D13 |1        30| D12~CIPO                     |1        30|
      A3 |7        24| D6~                          |7        24|
  SDA A4 |8        23| D5~                          |8        23|
  SCL A5 |9        22| D4~                          |9        22|
-     A6 |10       21| D3~                          |10       21|
-     A7 |11       20| D2~                          |11       20|
+     A6 |10       21| D3~                          |10       21| Y Servo
+     A7 |11       20| D2~                          |11       20| X Servo
     +5v |12       19| GND                      +5V |12       19| GND
   RESET |13       18| RESET                  RESET |13       18| RESET
     GND |14       17| D1 RX                    GND |14       17|
@@ -51,97 +51,110 @@ SCK~D13 |1        30| D12~CIPO                     |1        30|
 #include <Arduino_BMI270_BMM150.h>
 #include <Servo.h>
 
-Servo Xaxis_servo;
-Servo Yaxis_servo;
 
-// EDITORIAL VARIABLES (TUNE THESE)
+// GIMBAL CLASS
+class Gimbal {
+  public:
+    Servo Xaxis_servo;
+    Servo Yaxis_servo;
 
-const float SERVO_ANGLE_LIMIT = 1.0;        // use 1.0 for full range, 0.0 for no range. Affects servo range according to this graph https://www.desmos.com/calculator/pz3dhdu8sx
-const float PROPORTIONALITY_CONSTANT = 1.0; // tvc angle multiplied by this float each iteration. range 0.0 to 1.0 recommended
+    int HARD_SERVO_LIMIT;
 
-// variable declarations
+    Gimbal() {
+      HARD_SERVO_LIMIT = 30;
+    }
+    
+    void attach() {
 
-const long MAP_RADIUS = (long) floor( 90 * SERVO_ANGLE_LIMIT );
-const long LOWER_MAP_BOUND = 90 - MAP_RADIUS;
-const long UPPER_MAP_BOUND = 90 + MAP_RADIUS;
+      Xaxis_servo.attach(D4);
+      Yaxis_servo.attach(D5);
 
-float x, y, z;
-int degreesX = 0;
-int degreesY = 0;
+    }
 
-long Xaxis_command;
-long Yaxis_command;
+    // inputs are identical to two servos as if they were oriented with the arduino
+    void write(long pitch_command, long yaw_command) {
+
+      // create temp variables to operate on and center the range (i.e. from [0,180] to [-90,90])
+      float temp_pitch = pitch_command - 90;
+      float temp_yaw = yaw_command - 90;
+
+      // rotate command point 45 degrees
+      long q1_servo_command = round(temp_pitch * 0.707106781187 - temp_yaw * 0.707106781187);
+      long q2_servo_command = round(temp_yaw * 0.707106781187 + temp_pitch * 0.707106781187);
+
+      // apply hard servo limit
+      if (q1_servo_command > HARD_SERVO_LIMIT) {
+        q1_servo_command = HARD_SERVO_LIMIT;
+      } else if (q1_servo_command < -HARD_SERVO_LIMIT) {
+        q1_servo_command = -HARD_SERVO_LIMIT;
+      }
+      if (q2_servo_command > HARD_SERVO_LIMIT) {
+        q2_servo_command = HARD_SERVO_LIMIT;
+      } else if (q2_servo_command < -HARD_SERVO_LIMIT) {
+        q2_servo_command = -HARD_SERVO_LIMIT;
+      }
+
+      // shift back to range [0,180]
+      q1_servo_command = q1_servo_command + 90;
+      q2_servo_command = q2_servo_command + 90;
+
+      // write computed commands
+      Xaxis_servo.write(q1_servo_command);
+      Yaxis_servo.write(q2_servo_command);
+
+    }
+  
+};
 
 
-/********************************** SETUP *************************************/
 
+
+
+
+
+
+
+Gimbal myGimbal;
+
+// SETUP FUNCTION
 void setup() {
-  Serial.begin(9600);
-  while (!Serial);
-  Serial.println("Started");
-
-  // use D12 and D11 for servo A and B, use D4 and D5 for servo Q1 and Q2
-  Xaxis_servo.attach(D4);
-  Yaxis_servo.attach(D5);
 
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1);
   }
-  if (SERVO_ANGLE_LIMIT < 0.0 || SERVO_ANGLE_LIMIT > 1.0) {
-    Serial.println("SERVO_ANGLE_LIMIT must be between 0.0 and 1");
-    while (1);
-  }
 
-  Serial.print("Accelerometer sample rate = ");
-  Serial.print(IMU.accelerationSampleRate());
-  Serial.println("Hz");
+  myGimbal.attach();
+
 }
 
-/********************************** MAIN LOOP *********************************/
+// MAIN LOOP VARIABLE DECLARATIONS
+float x, y, z;
+long Xaxis_command, Yaxis_command;
 
 
+
+// MAIN LOOP
 void loop() {
 
-  if (IMU.accelerationAvailable()) {
+  if ( IMU.accelerationAvailable() ) {
+
     IMU.readAcceleration(x, y, z);
 
     // xz-plane
-    double angleX = atan( x/z ) * PROPORTIONALITY_CONSTANT; // bounded by [-PI/2, PI/2] which is roughly [-1.570796, 1.570796]
+    double angleX = atan( x/z ); // bounded by [-PI/2, PI/2] which is roughly [-1.570796, 1.570796]
     long intAngleX = (long) floor(angleX * 100); // new bounds: [-157, 157]
     // yz-plane
-    double angleY = atan( y/z ) * PROPORTIONALITY_CONSTANT;
+    double angleY = -atan( y/z );
     long intAngleY = (long) floor(angleY * 100);
 
+    Xaxis_command = map (intAngleX, -157, 157, 0, 180);
+    Yaxis_command = map (intAngleY, -157, 157, 0, 180);
 
-    // create servo commands
+    myGimbal.write(Yaxis_command, Xaxis_command);
 
-    Xaxis_command = map (intAngleX, -157, 157, LOWER_MAP_BOUND, UPPER_MAP_BOUND);
-    Yaxis_command = map (intAngleY, -157, 157, LOWER_MAP_BOUND, UPPER_MAP_BOUND);
-
-    // write servo commands
-
-    Xaxis_servo.write(Xaxis_command);
-    Yaxis_servo.write(Yaxis_command);
-    
-
-    // print acceleration vector
-    Serial.print(x);
-    Serial.print('\t');
-    Serial.print(y);
-    Serial.print('\t');
-    Serial.println(z);
   }
 
-  delay(50);
+  delay(10);
 
 }
-
-
-  /***************************** INTERRUPT SERVICE ******************************/
-
-
-  /***************************** CALLED SUBROUTINES ****************************/
-  
-
-  /************************************ END **********************************/
