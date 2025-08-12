@@ -107,6 +107,16 @@ void EKF_RollPitch::update(float ax, float ay, float az) {
 
   // Update covariance matrix: P++ = (I - K * C) * P+
   float Ptmp[4] = {
-
+    -P[0]*(C[2]*K[1] + C[4]*K[2] - 1.0f) - P[2]*(C[1]*K[0] + C[3]*K[1] + C[5]*K[2]), -P[1]*(C[2]*K[1] + C[4]*K[2] - 1.0f) - P[3]*(C[1]*K[0] + C[3]*K[1] + C[5]*K[2]),
+    -P[0]*(C[2]*K[4] + C[4]*K[5]) - P[2]*(C[1]*K[3] + C[3]*K[4] + C[5]*K[5] - 1.0f), -P[1]*(C[2]*K[4] + C[4]*K[5]) - P[3]*(C[1]*K[3] + C[3]*K[4] + C[5]*K[5] - 1.0f)
   };
+
+  P[0] = P[0] + Ptmp[0];
+  P[1] = P[1] + Ptmp[1];
+  P[2] = P[2] + Ptmp[2];
+  P[3] = P[3] + Ptmp[3];
+
+  // Update state estimate
+  phi_rad   = phi_rad   + K[0] * (ax - h[0]) + K[1] * (ay - h[1]) + K[2] * (az - h[2]);
+  theta_rad = theta_rad + K[3] * (ax - h[0]) + K[4] * (ay - h[1]) + K[5] * (az - h[2]);
 }
