@@ -3,8 +3,8 @@
 Servo X;
 Servo Y;
 
-int px = 1504;
-int py = 1384;
+int px = 90;
+int py = 90;
 
 String command;
 
@@ -20,8 +20,8 @@ void setup() {
   pinMode(D3, OUTPUT);
   digitalWrite(D3, HIGH);
 
-  X.writeMicroseconds(px);
-  Y.writeMicroseconds(py);
+  X.write(px);
+  Y.write(py);
 
   Serial.println("Started. Enter a command.");
   Serial.print("(");
@@ -40,7 +40,7 @@ void loop() {
 
     if (command.startsWith("x")) {
       px = command.substring(2).toInt();
-      X.writeMicroseconds(px);
+      X.write(px);
       Serial.print("(");
       Serial.print(px);
       Serial.print(",");
@@ -48,7 +48,7 @@ void loop() {
       Serial.println(")");
     } else if (command.startsWith("y")) {
       py = command.substring(2).toInt();
-      Y.writeMicroseconds(py);
+      Y.write(py);
       Serial.print("(");
       Serial.print(px);
       Serial.print(",");
