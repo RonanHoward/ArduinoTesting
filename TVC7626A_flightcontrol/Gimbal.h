@@ -5,6 +5,8 @@
 #include <Arduino.h>
 
 #define VECTORING_LIMIT_DEG 6.0f
+#define VECTORING_LIMIT_DEG_SQ (VECTORING_LIMIT_DEG * VECTORING_LIMIT_DEG)
+
 
 class Gimbal {
   public:
