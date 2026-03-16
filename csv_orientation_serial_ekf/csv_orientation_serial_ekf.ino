@@ -2,7 +2,7 @@
 #include "EKF.h"
 #include <avr/dtostrf.h>
 
-const unsigned long PRINT_FREQUENCY_HZ = 10ul;
+const unsigned long PRINT_FREQUENCY_HZ = 15ul;
 
 float EKF_PREDICT_PERIOD_S;
 float ax, ay, az, gx, gy, gz;
@@ -37,11 +37,12 @@ void loop() {
     state.update();
   }
 
-  if (micros() - last_print >= 1000ul / PRINT_FREQUENCY_HZ) {
+  if (millis() - last_print >= 1000ul / PRINT_FREQUENCY_HZ) {
     dtostrf(state.theta_rad*RAD_TO_DEG, 6, 2, bufferT);
     dtostrf(state.phi_rad*RAD_TO_DEG, 6, 2, bufferP);
     sprintf(strBuf, "%s,%s", bufferT, bufferP);
     Serial.println(strBuf);
+    last_print = millis();
   }
 
 }
