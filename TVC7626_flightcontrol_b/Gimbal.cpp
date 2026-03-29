@@ -19,7 +19,7 @@ void Gimbal::attach() {
 
 void Gimbal::write(int x, int y) {
   
-  if ( x*x + y*y > VECTORING_LIMIT_DEG_SQ ) {
+  if ( x*x + y*y > VECTORING_LIMIT_DEG * VECTORING_LIMIT_DEG ) {
 
     const float command_angle = atan2(x, y);
     Xservo.write(90 - round( VECTORING_LIMIT_DEG * sin(command_angle) * Xgain ));
@@ -31,4 +31,5 @@ void Gimbal::write(int x, int y) {
 
   Xservo.write(90 - round(x*Xgain));
   Yservo.write(90 + round(y*Ygain));
+  
 }

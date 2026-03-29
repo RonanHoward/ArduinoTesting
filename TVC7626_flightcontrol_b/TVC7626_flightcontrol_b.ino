@@ -1,35 +1,73 @@
 #include "Arduino_BMI270_BMM150.h"
 #include "Gimbal.h"
+#include "PID.h"
 
-#define LAUNCH_THRESHOLD 0.96f // in g's (1g=9.8m/s^2), reading will be roughly 1g during rest
 
-#define ALPHA_ACC_IIR 0.8f // alpha for accelerometer IIR
+// Launch detection sensitivity
+#define LAUNCH_THRESHOLD 1.1f // should be slightly above 1g
 
+// Gimbal angle to servo angle ratios
 #define XGAIN 2.1645f
 #define YGAIN 3.413f
 
-#define g 9.81f
+// Gyro bias
+#define GX_BIAS 0.001f
+#define GY_BIAS 0.001f
 
-bool launched = false;
+// ---- TELEMETRY ----
+// phi, theta, pid_phi, pid_theta, gx, gy, barometer
+
+// Runtime; after this many seconds, stop collecting telemetry
+#define RUNTIME 40
+// Telemetry same rate (Hz)
+#define TELEMETRY_FREQ_HZ 10
+
+// Number of measurements being tracked over time (not including time)
+// IMPORTANT: source code must change if this is changed
+#define MEASUREMENTS 7
+// Number of measurements to be logged once with no time stamp
+#define ONE_SHOT_ENTRIES 2
+
+#define MAX_TELEMETRY_ENTRIES RUNTIME*TELEMETRY_FREQ_HZ
+
+
+
+// ---- Code ----
 
 Gimbal gimbal(XGAIN, YGAIN);
 
-float ax, ay, az, gx, gy, gz; // store raw sensor readings
-// previous accelerations for IIR
-float pax = 0;
-float pay = 0;
-float paz = 1;
-// previous previous acceleration to compute initial state (before filter lag)
-float ppax, ppay, ppaz;
+PID pid_phi;
+PID pid_theta;
 
-float phi_deg;
-float theta_deg;
+bool launched = false;
 
-unsigned long now;
-unsigned long last_gyro_reading;
-long T = 100;
+// Gyroscope readings (gx, gy, gz)
+float gx, gy, gz; // +gx = +phi, +gy = +theta
+// Previous gyroscope readings (pgx, pgy)
+float pgx, pgy;
+// Accelerometer readings vector (ax, ay, az)
+float ax, ay, az;
+// Previous accelerometer readings vector (pax, pay, paz)
+float pax, pay, paz;
+
+// Current euler orientation
+float phi_deg, theta_deg;
+
+// Last readings (microseconds)
+unsigned long last_reading;
+// Time when algorithm stops, computed when launch time is found
+unsigned long done_time;
+
+// Telemetry logging
+unsigned long timestamps[MAX_TELEMETRY_ENTRIES];
+float entries[MAX_TELEMETRY_ENTRIES][MEASUREMENTS];
+int current_entry = 0;
+unsigned long launch_time; // in microseconds from power on
+float launch_phi_deg, launch_theta_deg;
+
 
 void setup() {
+
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU");
     while (1);
@@ -37,65 +75,131 @@ void setup() {
 
   gimbal.attach();
 
+  delay(100);
+  gimbal.write(0,0);
+  delay(1000);
+  last_reading = micros();
 }
 
 void loop() {
 
   if (launched) {
 
-    now = millis();
-
     if (IMU.gyroscopeAvailable()) {
 
+      // Time when readings become available (microseconds)
+      unsigned long now = micros();
+      // Time since last readings (seconds)
+      float T_sec = (now - last_reading) * 0.000001f;
+
+      // Get readings
       IMU.readGyroscope(gx, gy, gz);
 
-      T = (now - last_gyro_reading) / 1000; // time between readings
-      
-      // NOTE: (up late making sure of this)
-      // +gx = +phi
-      // +gy = +theta
+      // Estimate new current orientation
+      phi_deg   += (pgx + gx) * 0.5f * T_sec;
+      theta_deg += (pgy + gy) * 0.5f * T_sec;
 
-      Serial.print(gx);
-      Serial.print(',');
-      Serial.print(gy);
-      Serial.print(',');
-      Serial.println(gz);
+      // Update PIDs
+      pid_phi.update(phi_deg * DEG_TO_RAD);
+      pid_theta.update(theta_deg * DEG_TO_RAD);
 
-      // TODO: Gyro state estimation
+      // Write PID output to gimbal
+      gimbal.write(round(pid_phi.get_un()*RAD_TO_DEG), round(pid_theta.get_un()*RAD_TO_DEG));
 
-      last_gyro_reading = now;
-    }
-    
-  } else {
-
-    // 100Hz (slightly lower in reality)
-    if (IMU.accelerationAvailable()){
-
-      IMU.readAcceleration(ax, ay, az);
-      
-      // First apply IIR filter to az and immediately check if we have launched
-      az = ALPHA_ACC_IIR * paz + (1-ALPHA_ACC_IIR) * az;
-      if (az < LAUNCH_THRESHOLD) {
-        launched = true;
-        // set initial orientation
-        phi_deg   = -atan(ppay/ppaz) * RAD_TO_DEG;
-        theta_deg = asin(ppax) * RAD_TO_DEG;
-        return;
+      // Is runtime over?
+      if (now >= done_time) {
+        // Take a break
+        delay(20000); // 20s
+        // Convert units
+        for (int i = 0; i < MAX_TELEMETRY_ENTRIES; i++) {
+          entries[i][2] *= RAD_TO_DEG; // rad -> deg
+          entries[i][3] *= RAD_TO_DEG; // rad -> deg
+        }
+        // Infinite loop print telemetry
+        while (1) {
+          Serial.println();
+          Serial.print("Orientation at Launch:");
+          Serial.print('\t');
+          Serial.print(launch_phi_deg);
+          Serial.print(',');
+          Serial.println(launch_theta_deg);
+          for (int i = 0; i < MAX_TELEMETRY_ENTRIES; i++) {
+            Serial.print((timestamps[i] - launch_time) * 0.000001f, 6); // ms -> s
+            Serial.print(',');
+            for (int j = 0; j < MEASUREMENTS-1; j++) {
+              Serial.print(entries[i][0],6);
+              Serial.print(',');
+            }
+            Serial.println(entries[i][MEASUREMENTS-1]);
+          }
+          delay(10000);
+        }
       }
 
-      // Apply IIR to rest and save previous accelerations
-      ax = ALPHA_ACC_IIR * pax + (1-ALPHA_ACC_IIR) * ax;
-      ay = ALPHA_ACC_IIR * pay + (1-ALPHA_ACC_IIR) * ay;
-      ppax = pax;
-      ppay = pay;
-      ppaz = paz;
+      // Collect Telemetry
+      if (current_entry < MAX_TELEMETRY_ENTRIES) {
+        timestamps[current_entry] = now;
+        entries[current_entry][0] = phi_deg;
+        entries[current_entry][1] = theta_deg;
+        entries[current_entry][2] = pid_phi.get_un();
+        entries[current_entry][3] = pid_theta.get_un();
+        entries[current_entry][4] = gx;
+        entries[current_entry][5] = gy;
+        entries[current_entry][6] = 0.0f;
+        current_entry++;
+      }
+
+      // Save data for next time reaadings become available
+      pgx = gx;
+      pgy = gy;
+      last_reading = now;
+
+    }
+
+  } else {
+    // Check for new readings
+    if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
+      // Time when readings become available (microseconds)
+      unsigned long now = micros();
+      // Time since last readings (microseconds)
+      unsigned long T = now - last_reading;
+
+      // Get readings
+      IMU.readAcceleration(ax, ay, az);
+      IMU.readGyroscope(gx, gy, gz);
+
+      // Check for launch
+      if (ax*ax+ay*ay+az*az > LAUNCH_THRESHOLD * LAUNCH_THRESHOLD) {
+
+        // Time since last reading in seconds
+        float T_sec = T * 0.000001f;
+
+        // Find initial orientation from moment before launch is detected
+        // Add one integration step to estimate orientation at launch detection
+        phi_deg   = -atan(pay/paz) * RAD_TO_DEG + (pgx + gx) * 0.5f * T_sec;
+        theta_deg = asin(pax) * RAD_TO_DEG + (pgy + gy) * 0.5 * T_sec;
+
+        // Start TVC
+        launched = true;
+        launch_phi_deg   = phi_deg;
+        launch_theta_deg = theta_deg;
+        launch_time = now;
+        done_time = now + RUNTIME * 1000000;
+        last_reading = now;
+        pgx = gx;
+        pgy = gy;
+        return;
+
+      }
+
+      // Save values in case we are launching on the next read
       pax = ax;
       pay = ay;
       paz = az;
-    
+      pgx = gx;
+      pgy = gy;
+      last_reading = now;
     }
-
   }
-
 
 }

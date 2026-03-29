@@ -5,7 +5,6 @@
 #include <Arduino.h>
 
 #define VECTORING_LIMIT_DEG 10.0f
-#define VECTORING_LIMIT_DEG_SQ (VECTORING_LIMIT_DEG * VECTORING_LIMIT_DEG)
 
 
 class Gimbal {
@@ -16,10 +15,12 @@ class Gimbal {
     float Xgain, Ygain;
     
     Gimbal();
+    // x = phi, y = theta
     Gimbal(float xgain, float ygain);
 
     void attach();
     
+    // x = phi, y = theta
     void write(int x, int y);
 };
 
