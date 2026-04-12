@@ -2,6 +2,8 @@
 #include "Gimbal.h"
 #include "PID.h"
 
+// First-order fading memory IIR filter applied to gyroscope
+#define GYRO_IIR_ALPHA 0.01f
 
 // Launch detection sensitivity
 #define LAUNCH_THRESHOLD 1.1f // should be slightly above 1g
@@ -94,6 +96,10 @@ void loop() {
 
       // Get readings
       IMU.readGyroscope(gx, gy, gz);
+
+      // Apply filter
+      gx = GYRO_IIR_ALPHA * (gx - pgx) + pgx;
+      gy = GYRO_IIR_ALPHA * (gy - pgy) + pgy;
 
       // Estimate new current orientation
       phi_deg   += (pgx + gx) * 0.5f * T_sec;
