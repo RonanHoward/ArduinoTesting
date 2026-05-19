@@ -178,6 +178,10 @@ void controlFlight() {
       current_entry++;
     }
 
+    pgx = gx;
+    pgy = gy;
+    last_reading = now;
+
   }
 
 }
