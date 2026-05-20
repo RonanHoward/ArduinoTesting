@@ -5,10 +5,10 @@
 
 
 // Filtering constants
-#define GYRO_IIR_ALPHA 0.01f
+#define GYRO_IIR_ALPHA 0.97f
 // Gyro bias
-#define GX_BIAS 0.001f
-#define GY_BIAS 0.001f
+#define GX_BIAS 0.120575f
+#define GY_BIAS 0.047852f
 
 // Gimbal
 // Angle to servo angle ratios
