@@ -2,19 +2,14 @@
 #include "Gimbal.h"
 #include "PID.h"
 
+#define SPEAKER_PIN D6
+#define SPEAKER_TONE_HZ 2800
 
 
-// Filtering constants
-#define GYRO_IIR_ALPHA 0.97f
 // Gyro bias
-<<<<<<< HEAD
 #define GX_BIAS 0.001f
 #define GY_BIAS 0.001f
 #define GZ_BIAS 0.001f
-=======
-#define GX_BIAS 0.120575f
-#define GY_BIAS 0.047852f
->>>>>>> 005ab1e677e84491f26ef3d0c6f4ed24a1425c9f
 
 // Gimbal
 // Angle to servo angle ratios
@@ -44,6 +39,7 @@
 // Telemetry logging
 unsigned long timestamps[MAX_TELEMETRY_ENTRIES];
 float entries[MAX_TELEMETRY_ENTRIES][MEASUREMENTS];
+unsigned long last_log;
 int current_entry = 0;
 unsigned long launch_time; // in microseconds from power on
 
@@ -123,6 +119,8 @@ void detectLaunch() {
   if (voltage >= THRESHOLD_VOLTAGE) {
     flightState = FlightState::FLIGHT;
     launch_time = micros();
+    last_log = millis();
+    tone(SPEAKER_PIN, SPEAKER_TONE_HZ, 500);
     last_reading = launch_time;
     done_time = launch_time + RUNTIME * 1000000;
   }
@@ -219,13 +217,15 @@ void controlFlight() {
     }
 
     // Collect Telemetry
-    if (current_entry < MAX_TELEMETRY_ENTRIES) {
-      timestamps[current_entry] = now;
-      entries[current_entry][0] = pitch;
-      entries[current_entry][1] = roll;
-      entries[current_entry][2] = pid_phi.get_un();
-      entries[current_entry][3] = pid_theta.get_un();
-      current_entry++;
+    if (millis() - last_log >= 1000/TELEMETRY_FREQ_HZ) {
+      if (current_entry < MAX_TELEMETRY_ENTRIES) {
+        timestamps[current_entry] = now;
+        entries[current_entry][0] = pitch;
+        entries[current_entry][1] = roll;
+        entries[current_entry][2] = pid_phi.get_un();
+        entries[current_entry][3] = pid_theta.get_un();
+        current_entry++;
+      }
     }
 
     pgx = gx;
