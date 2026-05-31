@@ -1,1 +1,1 @@
-Constant Vectoring Simulation [on Desmos](https://www.desmos.com/calculator/t1r9eyiiwo)
+Gimbal tool animations have some errors. Rev C revised for quaternion integration; considers gz.
