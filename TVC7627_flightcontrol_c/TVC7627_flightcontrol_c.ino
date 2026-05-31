@@ -5,11 +5,16 @@
 
 
 // Filtering constants
-#define GYRO_IIR_ALPHA 0.01f
+#define GYRO_IIR_ALPHA 0.97f
 // Gyro bias
+<<<<<<< HEAD
 #define GX_BIAS 0.001f
 #define GY_BIAS 0.001f
 #define GZ_BIAS 0.001f
+=======
+#define GX_BIAS 0.120575f
+#define GY_BIAS 0.047852f
+>>>>>>> 005ab1e677e84491f26ef3d0c6f4ed24a1425c9f
 
 // Gimbal
 // Angle to servo angle ratios
@@ -222,6 +227,10 @@ void controlFlight() {
       entries[current_entry][3] = pid_theta.get_un();
       current_entry++;
     }
+
+    pgx = gx;
+    pgy = gy;
+    last_reading = now;
 
   }
 
