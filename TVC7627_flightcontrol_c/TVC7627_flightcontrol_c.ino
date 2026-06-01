@@ -3,13 +3,13 @@
 #include "PID.h"
 
 #define SPEAKER_PIN D6
-#define SPEAKER_TONE_HZ 2800
+#define SPEAKER_TONE_HZ 2730
 
 
 // Gyro bias
-#define GX_BIAS 0.001f
-#define GY_BIAS 0.001f
-#define GZ_BIAS 0.001f
+#define GX_BIAS -0.1062f
+#define GY_BIAS -0.0075f
+#define GZ_BIAS -0.1001f
 
 // Gimbal
 // Angle to servo angle ratios
@@ -20,7 +20,7 @@
 // phi, theta, pid_phi, pid_theta, gx, gy, barometer
 
 // Runtime; after this many seconds, stop collecting telemetry
-#define RUNTIME 40
+#define RUNTIME 60
 // Telemetry same rate (Hz)
 #define TELEMETRY_FREQ_HZ 10
 
@@ -31,8 +31,8 @@
 #define MAX_TELEMETRY_ENTRIES RUNTIME*TELEMETRY_FREQ_HZ
 
 // Ignition
-#define IGNITION_PIN A0
-#define THRESHOLD_VOLTAGE 2.5f // Threshold for launch (adjust this)
+#define IGNITION_PIN A5
+#define THRESHOLD_VOLTAGE 1.5f // Threshold for launch (adjust this)
 #define ADC_MAX 4095
 #define VREF 3.3f
 
@@ -88,10 +88,10 @@ void setup() {
   analogReadResolution(12);
 
   gimbal.attach();
-
+  
+  tone(SPEAKER_PIN, SPEAKER_TONE_HZ, 500);
   delay(100);
   gimbal.write(0,0);
-  delay(1000);
 
 }
 
@@ -147,20 +147,20 @@ void controlFlight() {
       // Remove bias and scale error
       gx = gx - GX_BIAS;
       gy = gy - GY_BIAS;
-      gz = gz - GZ_BIAS;
+      gz = 0.0f;
 
       // Board axes -> body axes
       float wx = gx * DEG_TO_RAD;  // rad/s, body X (transverse)
       float wy = gy * DEG_TO_RAD;  // rad/s, body Y (transverse)
-      float wz = gz * DEG_TO_RAD;  // rad/s, body Z (long axis / spin)
+      float wz = 0.0f;  // rad/s, body Z (long axis / spin)
 
       // Integrate with the exact exponential map. A body rate that is constant
       // over the step (e.g. steady spin) is integrated exactly at any dt;
       // residual error comes only from the rate changing within a step.
       float dthx = wx * dt;
       float dthy = wy * dt;
-      float dthz = wz * dt;
-      float theta = sqrtf(dthx*dthx + dthy*dthy + dthz*dthz);
+      float dthz = 0.0f;
+      float theta = sqrtf(dthx*dthx + dthy*dthy);
 
       float dw, dx, dy, dz;           // incremental rotation quaternion
       if (theta > 1.0e-8f) {
@@ -198,21 +198,16 @@ void controlFlight() {
     float roll  = atan2f(vy, vz);   // lean in Y-Z plane
 
     // Update PIDs
-    pid_phi.update(pitch);
-    pid_theta.update(roll);
+    pid_phi.update(roll);
+    pid_theta.update(pitch);
 
     // Write PID output to gimbal
-    gimbal.write(round(pid_phi.get_un()*RAD_TO_DEG), round(pid_theta.get_un()*RAD_TO_DEG));
+    gimbal.write(-round(pid_phi.get_un()*RAD_TO_DEG), round(pid_theta.get_un()*RAD_TO_DEG));
 
     // Is runtime over?
     if (now >= done_time) {
       // Take a break
       delay(20000); // 20s
-      // Convert units
-      for (int i = 0; i < MAX_TELEMETRY_ENTRIES; i++) {
-        entries[i][2] *= RAD_TO_DEG; // rad -> deg
-        entries[i][3] *= RAD_TO_DEG; // rad -> deg
-      }
       flightState = FlightState::OUTPUT_TELEMETRY;
     }
 
@@ -226,6 +221,7 @@ void controlFlight() {
         entries[current_entry][3] = pid_theta.get_un();
         current_entry++;
       }
+      last_log = millis();
     }
 
     pgx = gx;
@@ -247,12 +243,11 @@ void outputTelemetry() {
     Serial.print((timestamps[i] - launch_time) * 0.000001f, 6); // ms -> s
     Serial.print(',');
     for (int j = 0; j < MEASUREMENTS-1; j++) {
-      Serial.print(entries[i][0],6);
+      Serial.print(entries[i][j],6);
       Serial.print(',');
     }
-    Serial.println(entries[i][MEASUREMENTS-1]);
+    Serial.println(entries[i][MEASUREMENTS-1],6);
   }
   delay(10000); // 10s then print again
 }
-
 
