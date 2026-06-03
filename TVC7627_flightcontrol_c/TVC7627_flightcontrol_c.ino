@@ -1,3 +1,4 @@
+#include <Arduino_LPS22HB.h>
 #include "Arduino_BMI270_BMM150.h"
 #include "Gimbal.h"
 #include "PID.h"
@@ -26,7 +27,7 @@
 
 // Number of measurements being tracked over time (not including time)
 // IMPORTANT: source code must change if this is changed
-#define MEASUREMENTS 4
+#define MEASUREMENTS 5
 
 #define MAX_TELEMETRY_ENTRIES RUNTIME*TELEMETRY_FREQ_HZ
 
@@ -82,6 +83,10 @@ void setup() {
 
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU");
+    while (1);
+  }
+  if (!BARO.begin()) {
+    Serial.println("Failed to initialize pressure sensor!");
     while (1);
   }
 
@@ -169,12 +174,12 @@ void controlFlight() {
         dw = cosf(half);
         dx = dthx * s;
         dy = dthy * s;
-        dz = dthz * s;
+        dz = 0.0f;
       } else {                        // small-angle limit (avoids div-by-zero)
         dw = 1.0f;
         dx = 0.5f * dthx;
         dy = 0.5f * dthy;
-        dz = 0.5f * dthz;
+        dz = 0.0f;
       }
 
       // q = q (x) dq   (Hamilton product; body-frame rate update)
@@ -214,11 +219,13 @@ void controlFlight() {
     // Collect Telemetry
     if (millis() - last_log >= 1000/TELEMETRY_FREQ_HZ) {
       if (current_entry < MAX_TELEMETRY_ENTRIES) {
+        float pressure = BARO.readPressure();
         timestamps[current_entry] = now;
         entries[current_entry][0] = pitch;
         entries[current_entry][1] = roll;
         entries[current_entry][2] = pid_phi.get_un();
         entries[current_entry][3] = pid_theta.get_un();
+        entries[current_entry][4] = pressure;
         current_entry++;
       }
       last_log = millis();
