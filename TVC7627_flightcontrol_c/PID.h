@@ -25,9 +25,9 @@ class PID {
   private:
     // constants
     const float control = 0.0f;
-    const float Kp = 0.40f;
+    const float Kp = 0.50f;
     const float Ki = 0.00f;
-    const float Kd = 0.1f;
+    const float Kd = 0.05f;
     const float t = 0.05f;
     const float T = PID_FILTER_PERIOD_S;
     const float frequency = 1 / PID_FILTER_PERIOD_S;
