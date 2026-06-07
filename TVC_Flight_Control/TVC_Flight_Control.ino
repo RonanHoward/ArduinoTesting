@@ -1,3 +1,4 @@
+#include <Arduino_LPS22HB.h>
 #include "Arduino_BMI270_BMM150.h"
 #include "Gimbal.h"
 #include "PID.h"
@@ -5,6 +6,9 @@
 #define SPEAKER_PIN D6
 #define SPEAKER_TONE_HZ 2730
 
+#define SERVO_UPDATE_FREQUENCY_HZ 50
+
+#define PID_FREQUENCY_HZ 1000
 
 // Gyro bias
 #define GX_BIAS -0.1062f
@@ -26,7 +30,7 @@
 
 // Number of measurements being tracked over time (not including time)
 // IMPORTANT: source code must change if this is changed
-#define MEASUREMENTS 4
+#define MEASUREMENTS 5
 
 #define MAX_TELEMETRY_ENTRIES RUNTIME*TELEMETRY_FREQ_HZ
 
@@ -70,11 +74,14 @@ unsigned long done_time;
 
 
 // Rocket orientation state
-float phi_deg = 0.0f;
-float theta_deg = 0.0f;
+float roll = 0.0f;
+float pitch = 0.0f;
 // Attitude quaternion (body -> launch frame), [w, x, y, z]. Identity = vertical.
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
 
+
+unsigned long last_pid_update = 0;
+unsigned long last_servo_update = 0;
 
 
 
@@ -82,6 +89,10 @@ void setup() {
 
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU");
+    while (1);
+  }
+  if (!BARO.begin()) {
+    Serial.println("Failed to initialize pressure sensor!");
     while (1);
   }
 
@@ -132,6 +143,7 @@ void detectLaunch() {
 
 void controlFlight() {
   
+  // Update Orientation State
   if (IMU.gyroscopeAvailable()) {
 
     IMU.readGyroscope(gx, gy, gz);
@@ -169,12 +181,12 @@ void controlFlight() {
         dw = cosf(half);
         dx = dthx * s;
         dy = dthy * s;
-        dz = dthz * s;
+        dz = 0.0f;
       } else {                        // small-angle limit (avoids div-by-zero)
         dw = 1.0f;
         dx = 0.5f * dthx;
         dy = 0.5f * dthy;
-        dz = 0.5f * dthz;
+        dz = 0.0f;
       }
 
       // q = q (x) dq   (Hamilton product; body-frame rate update)
@@ -194,40 +206,55 @@ void controlFlight() {
     float vz = 1.0f - 2.0f * (q1*q1 + q2*q2);   // = cos(total tilt)
 
     // Two orthogonal off-vertical lean angles (each 0 at vertical).
-    float pitch = atan2f(vx, vz);   // lean in X-Z plane
-    float roll  = atan2f(vy, vz);   // lean in Y-Z plane
-
-    // Update PIDs
-    pid_phi.update(roll);
-    pid_theta.update(pitch);
-
-    // Write PID output to gimbal
-    gimbal.write(-round(pid_phi.get_un()*RAD_TO_DEG), round(pid_theta.get_un()*RAD_TO_DEG));
-
-    // Is runtime over?
-    if (now >= done_time) {
-      // Take a break
-      delay(20000); // 20s
-      flightState = FlightState::OUTPUT_TELEMETRY;
-    }
-
-    // Collect Telemetry
-    if (millis() - last_log >= 1000/TELEMETRY_FREQ_HZ) {
-      if (current_entry < MAX_TELEMETRY_ENTRIES) {
-        timestamps[current_entry] = now;
-        entries[current_entry][0] = pitch;
-        entries[current_entry][1] = roll;
-        entries[current_entry][2] = pid_phi.get_un();
-        entries[current_entry][3] = pid_theta.get_un();
-        current_entry++;
-      }
-      last_log = millis();
-    }
+    pitch = atan2f(vx, vz);   // lean in X-Z plane
+    roll  = atan2f(vy, vz);   // lean in Y-Z plane
 
     pgx = gx;
     pgy = gy;
     last_reading = now;
 
+  }
+
+
+  // PID update
+  unsigned long now_micros = micros();
+  if (now_micros - last_pid_update >= 1e6 / PID_FREQUENCY_HZ) {
+    // Update PIDs
+    pid_phi.update(roll);
+    pid_theta.update(pitch);
+
+    last_pid_update = now_micros;
+  }
+
+  // Write to gimbal servos
+  if (millis() - last_servo_update >= 1e3 / SERVO_UPDATE_FREQUENCY_HZ) {
+    // Write PID output to gimbal
+    gimbal.write(-round(pid_phi.get_un()*RAD_TO_DEG), round(pid_theta.get_un()*RAD_TO_DEG));
+    
+    last_servo_update = millis();
+  }
+
+
+  // Collect Telemetry
+  if (millis() - last_log >= 1e3 / TELEMETRY_FREQ_HZ) {
+    if (current_entry < MAX_TELEMETRY_ENTRIES) {
+      float pressure = BARO.readPressure();
+      timestamps[current_entry] = now_micros;
+      entries[current_entry][0] = pitch;
+      entries[current_entry][1] = roll;
+      entries[current_entry][2] = pid_phi.get_un();
+      entries[current_entry][3] = pid_theta.get_un();
+      entries[current_entry][4] = pressure;
+      current_entry++;
+    }
+    last_log = millis();
+  }
+
+  // Is runtime over?
+  if (micros() >= done_time) {
+    // Take a break
+    delay(20000); // 20s
+    flightState = FlightState::OUTPUT_TELEMETRY;
   }
 
 }
@@ -250,4 +277,3 @@ void outputTelemetry() {
   }
   delay(10000); // 10s then print again
 }
-

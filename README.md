@@ -1,1 +1,0 @@
-Gimbal tool animations have some errors. Rev C revised for quaternion integration; considers gz.
