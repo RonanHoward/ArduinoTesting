@@ -41,6 +41,15 @@ LSM6DSVClass::LSM6DSVClass(TwoWire &wire, uint8_t address)
 int LSM6DSVClass::begin() {
   // NOTE: the sketch must call Wire.begin() (and setClock) once before this,
   // so multiple drivers can share the bus without re-initializing it.
+
+  // Software reset: clears any confused digital state left by an interrupted
+  // transfer (the software analog of a power cycle). Self-clears when done.
+  writeReg(REG_CTRL3, 0x01);               // SW_RESET = bit0
+  unsigned long t0 = millis();
+  while (readReg(REG_CTRL3) & 0x01) {
+    if (millis() - t0 > 10) return 0;      // reset never cleared -> let caller retry
+  }
+
   if (readReg(REG_WHO_AM_I) != WHO_AM_I_VAL) {
     return 0;                              // wrong/missing part
   }

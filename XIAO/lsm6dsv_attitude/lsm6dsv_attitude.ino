@@ -1,11 +1,12 @@
 /*
- * Gyro-only attitude estimation + barometer for the XIAO RA4M1
+ * Gyro-only attitude estimation + barometer on the XIAO RA4M1.
  * Two devices share one I2C bus (Wire):
  *   - LSM6DSV gyro  @ 0x6A  (lsm6dsv.h / .cpp)  serviced at 240 Hz
  *   - LPS22HB baro  @ 0x5C  (lps22hb.h / .cpp)  serviced at ~25 Hz
+ * All five files live in this same sketch folder.
  *
- * The sketch initializes the shared bus once and each driver's begin()
- * only configures its own chip
+ * The sketch initializes the shared bus ONCE; each driver's begin()
+ * only configures its own chip. Distinct addresses -> no bus conflict.
  */
 #include "lsm6dsv.h"
 #include "lps22hb.h"
@@ -70,25 +71,60 @@ void otherTasks() {
   }
 }
 
-// ----------------------------------------------------------------------------
+// Recover a stuck I2C bus. If a reset interrupts a read mid-byte, a slave
+// can be left holding SDA low, which blocks the START of every future
+// transaction (survives MCU reset; only a power cycle clears it otherwise).
+// Manually clock SCL up to 9 times to let the slave finish its byte and
+// release SDA, then issue a STOP. Call this BEFORE Wire.begin().
+// Lines are driven open-drain style: release = INPUT_PULLUP, low = OUTPUT LOW.
+void i2cBusRecovery(uint8_t sdaPin, uint8_t sclPin) {
+  pinMode(sclPin, INPUT_PULLUP);
+  pinMode(sdaPin, INPUT_PULLUP);
+  delayMicroseconds(10);
+
+  // Clock out up to 9 pulses while SDA is held low by a stuck slave.
+  for (int i = 0; i < 9 && digitalRead(sdaPin) == LOW; i++) {
+    pinMode(sclPin, OUTPUT);
+    digitalWrite(sclPin, LOW);              // SCL low
+    delayMicroseconds(5);
+    pinMode(sclPin, INPUT_PULLUP);          // SCL released high
+    delayMicroseconds(5);
+  }
+
+  // Generate a STOP condition: SDA low -> high while SCL is high.
+  pinMode(sdaPin, OUTPUT);
+  digitalWrite(sdaPin, LOW);
+  delayMicroseconds(5);
+  pinMode(sclPin, INPUT_PULLUP);            // SCL high
+  delayMicroseconds(5);
+  pinMode(sdaPin, INPUT_PULLUP);            // SDA released high = STOP
+  delayMicroseconds(5);
+}
+
+// ---------------------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
   while (!Serial) {}
 
-  // Initialize shared bus for IMU and baro
-  Wire.begin();
-  Wire.setClock(400000); // Fast Mode
-
-  if (!IMU.begin()) {
-    Serial.println("LSM6DSV init failed (WHO_AM_I 0x70). Check part/wiring.");
+  // Self-healing bring-up (no power cycle needed):
+  //   1. clock a stuck slave free (frees SDA at the bus level)
+  //   2. Wire.begin() reclaims the pins for I2C
+  //   3. each driver's begin() software-resets its chip, then verifies it
+  // Retry a few times so a lockup from an interrupted reset recovers here.
+  bool ok = false;
+  for (int attempt = 1; attempt <= 3 && !ok; attempt++) {
+    i2cBusRecovery(SDA, SCL);               // GPIO bit-bang: free the bus
+    Wire.begin();                           // (re)claim the pins for I2C
+    Wire.setClock(400000);                  // Fast Mode; both parts tolerate it
+    ok = IMU.begin() && BARO.begin();       // SW-reset + WHO_AM_I on each
+    if (!ok) delay(10);
+  }
+  if (!ok) {
+    Serial.println("Sensor bring-up failed after recovery. Check wiring/pull-ups.");
     while (1) delay(1000);
   }
-  if (!BARO.begin()) {
-    Serial.println("LPS22HB init failed (WHO_AM_I 0xB1). Check addr/wiring.");
-    while (1) delay(1000);
-  }
 
-  // Gyro bias calibration (hold still)
+  // Gyro bias calibration (hold still).
   Serial.println("Calibrating gyro bias -- hold the sensor still...");
   const int N = 500;
   double sx = 0, sy = 0, sz = 0;
@@ -106,10 +142,10 @@ void setup() {
 }
 
 void loop() {
-  // Non-blocking gyro service (fast path, 240 Hz)
+  // Non-blocking gyro service (fast path, 240 Hz).
   if (IMU.gyroscopeAvailable()) {
     float gx, gy, gz;
-    IMU.readGyroscope(gx, gy, gz); // dps
+    IMU.readGyroscope(gx, gy, gz);          // dps
 
     unsigned long now = micros();
     float dt = (now - tPrev) * 1e-6f;
@@ -121,5 +157,5 @@ void loop() {
     integrate(wx, wy, wz, dt);
   }
 
-  otherTasks(); // baro + printing
+  otherTasks();                             // baro + printing, unblocked
 }

@@ -29,6 +29,15 @@ LPS22HBClass::LPS22HBClass(TwoWire &wire, uint8_t address)
 
 int LPS22HBClass::begin() {
   // Bus must already be initialized by the sketch (shared with the gyro).
+
+  // Software reset: clears confused digital state from an interrupted
+  // transfer. SWRESET self-clears when the reset completes.
+  writeReg(REG_CTRL_REG2, 0x04);            // SWRESET = bit2
+  unsigned long t0 = millis();
+  while (readReg(REG_CTRL_REG2) & 0x04) {
+    if (millis() - t0 > 10) return 0;       // never cleared -> let caller retry
+  }
+
   if (readReg(REG_WHO_AM_I) != WHO_AM_I_VAL) {
     return 0;
   }

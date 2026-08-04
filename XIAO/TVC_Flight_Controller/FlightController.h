@@ -1,0 +1,190 @@
+// =====================================================================
+//  FlightController.h  -  the flight brain (state machine)
+//  Advanced file. Ties the sensors, estimator, PIDs, gimbal, and
+//  parachute together and sequences the flight:
+//
+//    PREFLIGHT --(launch pin high)--> ASCENT
+//    ASCENT    --(baro descent OR backup timer)--> DESCENT
+//    DESCENT   --(chute out)--> LANDED
+//    (any bring-up failure) -> ERROR (safe: centered gimbal, chute stowed)
+//
+//  Normal tuning lives in config.h. The one thing here you might swap is
+//  detectLaunch(), which will become an accelerometer trigger later.
+// =====================================================================
+#ifndef FLIGHT_CONTROLLER_H
+#define FLIGHT_CONTROLLER_H
+
+#include <Arduino.h>
+#include <Wire.h>
+#include "config.h"
+#include "lsm6dsv.h"
+#include "lps22hb.h"
+#include "AttitudeEstimator.h"
+#include "PID.h"
+#include "TVCMount.h"
+#include "Parachute.h"
+
+enum FlightState { STATE_PREFLIGHT, STATE_ASCENT, STATE_DESCENT, STATE_LANDED, STATE_ERROR };
+
+class FlightController {
+public:
+  FlightController()
+    : _state(STATE_PREFLIGHT),
+      _pitchPID(PITCH_KP, PITCH_KI, PITCH_KD, PID_OUTPUT_LIMIT_DEG),
+      _yawPID(YAW_KP, YAW_KI, YAW_KD, PID_OUTPUT_LIMIT_DEG),
+      _launchTime(0), _lastTelem(0), _lastBaro(0) {}
+
+  // One-time startup. Call from setup().
+  void begin() {
+    pinMode(LAUNCH_PIN, INPUT);
+
+    if (!bringUpSensors()) { _state = STATE_ERROR; return; }
+
+    _tvc.begin();       // attach + center gimbal servos
+    _chute.begin();     // attach + stow parachute servo
+
+    if (!_est.calibrate(GYRO_BIAS_SAMPLES)) { _state = STATE_ERROR; return; }
+
+    float p, t;         // capture pad pressure as the altitude zero
+    if (readBaroNow(p, t)) _chute.setGroundPressure(p);
+
+    _state = STATE_PREFLIGHT;
+  }
+
+  // Call every loop().
+  void update() {
+    switch (_state) {
+      case STATE_PREFLIGHT: preflight();  break;
+      case STATE_ASCENT:    ascent();     break;
+      case STATE_DESCENT:   descent();    break;
+      case STATE_LANDED:    landed();     break;
+      case STATE_ERROR:     errorState(); break;
+    }
+  }
+
+  FlightState state() { return _state; }
+
+private:
+  FlightState _state;
+  AttitudeEstimator _est;
+  PID _pitchPID, _yawPID;
+  TVCMount _tvc;
+  Parachute _chute;
+  unsigned long _launchTime, _lastTelem, _lastBaro;
+
+  // ---------------- states ----------------
+  void preflight() {
+    _tvc.center();                       // hold gimbal straight on the pad
+    if (detectLaunch()) {
+      _launchTime = millis();
+      _est.resetOrientation();           // launch attitude becomes "vertical"
+      _pitchPID.reset();
+      _yawPID.reset();
+      _state = STATE_ASCENT;
+    }
+    telemetry();
+  }
+
+  void ascent() {
+    // Control loop: on each new gyro sample, integrate then run PID -> gimbal.
+    if (_est.update()) {
+      float dt = _est.lastDt();
+      // Setpoint 0 = keep the launch attitude (stay vertical).
+      float pitchCmd = _pitchPID.update(0.0f, PITCH_AXIS_SIGN * _est.pitch(), dt);
+      float yawCmd   = _yawPID.update  (0.0f, YAW_AXIS_SIGN   * _est.yaw(),   dt);
+      _tvc.command(pitchCmd, yawCmd);
+    }
+
+    serviceBaro();  // ~25 Hz altitude/apogee tracking
+
+    if (_chute.shouldDeploy(millis() - _launchTime)) {
+      _state = STATE_DESCENT;
+    }
+    telemetry();
+  }
+
+  void descent() {
+    _chute.deploy();
+    _tvc.center();
+    _tvc.detach();                       // relax the gimbal under the chute
+    _state = STATE_LANDED;
+  }
+
+  void landed() {
+    telemetry();                         // idle; keep reporting
+  }
+
+  void errorState() {
+    // Fail safe: gimbal centered, chute stowed, report periodically.
+    static unsigned long last = 0;
+    if (millis() - last > 1000) {
+      last = millis();
+      Serial.println("ERROR: sensor bring-up failed. Check wiring/pull-ups.");
+    }
+  }
+
+  // ------------- launch detection (swap for accelerometer later) -------------
+  bool detectLaunch() {
+    return analogRead(LAUNCH_PIN) > LAUNCH_THRESHOLD_COUNTS;
+  }
+
+  // ------------- barometer helpers -------------
+  bool readBaroNow(float &p, float &t) {
+    if (BARO.pressureAvailable()) { BARO.readPressure(p); BARO.readTemperature(t); return true; }
+    return false;
+  }
+  void serviceBaro() {
+    if (millis() - _lastBaro >= 40) {    // ~25 Hz, matches the baro ODR
+      _lastBaro = millis();
+      if (BARO.pressureAvailable()) {
+        float p;
+        BARO.readPressure(p);
+        _chute.updateAltitude(p);
+      }
+    }
+  }
+
+  // ------------- telemetry -------------
+  void telemetry() {
+#if TELEMETRY_ENABLED
+    if (millis() - _lastTelem >= (1000 / TELEMETRY_HZ)) {
+      _lastTelem = millis();
+      Serial.print("state:");  Serial.print((int)_state);
+      Serial.print(" pitch:"); Serial.print(_est.pitch(), 1);
+      Serial.print(" yaw:");   Serial.print(_est.yaw(), 1);
+      Serial.print(" alt:");   Serial.print(_chute.altitude(), 1);
+      Serial.print(" apogee:");Serial.print(_chute.apogee(), 1);
+      Serial.println();
+    }
+#endif
+  }
+
+  // ------------- sensor bring-up (bus recovery + software reset + retry) -----
+  bool bringUpSensors() {
+    bool ok = false;
+    for (int attempt = 1; attempt <= 3 && !ok; attempt++) {
+      i2cBusRecovery(SDA, SCL);          // free a stuck slave at the bus level
+      Wire.begin();                      // (re)claim the pins for I2C
+      Wire.setClock(400000);
+      ok = IMU.begin() && BARO.begin();  // each does its own software reset
+      if (!ok) delay(10);
+    }
+    return ok;
+  }
+
+  // Clock a stuck I2C slave free, then STOP. Call before Wire.begin().
+  static void i2cBusRecovery(uint8_t sdaPin, uint8_t sclPin) {
+    pinMode(sclPin, INPUT_PULLUP);
+    pinMode(sdaPin, INPUT_PULLUP);
+    delayMicroseconds(10);
+    for (int i = 0; i < 9 && digitalRead(sdaPin) == LOW; i++) {
+      pinMode(sclPin, OUTPUT); digitalWrite(sclPin, LOW); delayMicroseconds(5);
+      pinMode(sclPin, INPUT_PULLUP);                      delayMicroseconds(5);
+    }
+    pinMode(sdaPin, OUTPUT); digitalWrite(sdaPin, LOW); delayMicroseconds(5);
+    pinMode(sclPin, INPUT_PULLUP);                      delayMicroseconds(5);
+    pinMode(sdaPin, INPUT_PULLUP);                      delayMicroseconds(5);
+  }
+};
+
+#endif // FLIGHT_CONTROLLER_H
