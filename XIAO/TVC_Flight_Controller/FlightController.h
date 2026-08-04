@@ -23,6 +23,7 @@
 #include "PID.h"
 #include "TVCMount.h"
 #include "Parachute.h"
+#include "Telemetry.h"
 
 enum FlightState { STATE_PREFLIGHT, STATE_ASCENT, STATE_DESCENT, STATE_LANDED, STATE_ERROR };
 
@@ -70,19 +71,24 @@ private:
   PID _pitchPID, _yawPID;
   TVCMount _tvc;
   Parachute _chute;
-  unsigned long _launchTime, _lastTelem, _lastBaro;
+  unsigned long _launchTime, _lastTelem, _lastBaro, _lastTelemPrint;
+  TelemetryClass _telemetry;
+  float _pitchCmd = 0.0f;
+  float _rollCmd = 0.0f;
+
 
   // ---------------- states ----------------
   void preflight() {
     _tvc.center();                       // hold gimbal straight on the pad
-    if (detectLaunch()) {
+    // if (detectLaunch()) {
+    if (true) {
       _launchTime = millis();
       _est.resetOrientation();           // launch attitude becomes "vertical"
       _pitchPID.reset();
       _yawPID.reset();
       _state = STATE_ASCENT;
+      tone(SPEAKER_PIN, SPEAKER_TONE_FREQ, 400);
     }
-    telemetry();
   }
 
   void ascent() {
@@ -90,28 +96,31 @@ private:
     if (_est.update()) {
       float dt = _est.lastDt();
       // Setpoint 0 = keep the launch attitude (stay vertical).
-      float pitchCmd = _pitchPID.update(0.0f, PITCH_AXIS_SIGN * _est.pitch(), dt);
-      float yawCmd   = _yawPID.update  (0.0f, YAW_AXIS_SIGN   * _est.yaw(),   dt);
-      _tvc.command(pitchCmd, yawCmd);
+      _pitchCmd = _pitchPID.update(0.0f, PITCH_AXIS_SIGN * _est.pitch(), dt);
+      _rollCmd  = _yawPID.update  (0.0f, YAW_AXIS_SIGN   * _est.roll(),  dt);
+      _tvc.command(_pitchCmd, _rollCmd);
     }
 
     serviceBaro();  // ~25 Hz altitude/apogee tracking
 
-    if (_chute.shouldDeploy(millis() - _launchTime)) {
-      _state = STATE_DESCENT;
-    }
+    // if (_chute.shouldDeploy(millis() - _launchTime)) {
+    //   _state = STATE_DESCENT;
+    // }
     telemetry();
   }
 
   void descent() {
-    _chute.deploy();
+    // _chute.deploy();
     _tvc.center();
-    _tvc.detach();                       // relax the gimbal under the chute
+    _tvc.detach();                  // relax the gimbal under the chute
     _state = STATE_LANDED;
   }
 
   void landed() {
-    telemetry();                         // idle; keep reporting
+    if (millis() - _lastTelemPrint >= 10000) {
+      _telemetry.print_logs();
+      _lastTelemPrint = millis();
+    }
   }
 
   void errorState() {
@@ -149,12 +158,20 @@ private:
 #if TELEMETRY_ENABLED
     if (millis() - _lastTelem >= (1000 / TELEMETRY_HZ)) {
       _lastTelem = millis();
-      Serial.print("state:");  Serial.print((int)_state);
-      Serial.print(" pitch:"); Serial.print(_est.pitch(), 1);
-      Serial.print(" yaw:");   Serial.print(_est.yaw(), 1);
-      Serial.print(" alt:");   Serial.print(_chute.altitude(), 1);
-      Serial.print(" apogee:");Serial.print(_chute.apogee(), 1);
-      Serial.println();
+      _telemetry.log(
+        millis() / 1000.0f,
+        _est.pitch(),
+        _est.roll(),
+        _pitchCmd,
+        _rollCmd,
+        _chute.altitude()
+      );
+      // Serial.print("state:");  Serial.print((int)_state);
+      // Serial.print(" roll:"); Serial.print(_est.roll(), 1);
+      // Serial.print(" pitch:");   Serial.print(_est.pitch(), 1);
+      // Serial.print(" alt:");   Serial.print(_chute.altitude(), 1);
+      // Serial.print(" apogee:");Serial.print(_chute.apogee(), 1);
+      // Serial.println();
     }
 #endif
   }

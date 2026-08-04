@@ -18,8 +18,8 @@
 class Parachute {
 public:
   void begin() {
-    _servo.attach(SERVO_CHUTE_PIN);
-    stow();
+    // _servo.attach(SERVO_CHUTE_PIN);
+    // stow();
     _deployed = false;
     _descentCount = 0;
     _groundP = 1013.25f;      // replaced by setGroundPressure() on the pad

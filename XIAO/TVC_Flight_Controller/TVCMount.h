@@ -29,11 +29,11 @@ public:
     pitchDeg = clampDeflect(pitchDeg);
     yawDeg   = clampDeflect(yawDeg);
 
-    int pUs = SERVO_PITCH_CENTER_US + (int)(SERVO_PITCH_SIGN * pitchDeg * SERVO_US_PER_DEG);
-    int yUs = SERVO_YAW_CENTER_US   + (int)(SERVO_YAW_SIGN   * yawDeg   * SERVO_US_PER_DEG);
+    int pDeg = SERVO_PITCH_CENTER_DEG + (int)(SERVO_PITCH_SIGN * pitchDeg);
+    int yDeg = SERVO_YAW_CENTER_DEG   + (int)(SERVO_YAW_SIGN   * yawDeg  );
 
-    _pitch.writeMicroseconds(pUs);
-    _yaw.writeMicroseconds(yUs);
+    _pitch.write(pDeg);
+    _yaw.write(yDeg);
   }
 
   // Relax the servos (e.g. after the chute is out).

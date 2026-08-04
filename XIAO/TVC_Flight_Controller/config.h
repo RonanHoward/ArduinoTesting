@@ -11,9 +11,9 @@
 // ---------------------------------------------------------------------
 //  1. SERVO WIRING   -   which board pin each servo signal wire uses
 // ---------------------------------------------------------------------
-#define SERVO_PITCH_PIN    1      // gimbal servo for the PITCH axis
-#define SERVO_YAW_PIN      2      // gimbal servo for the YAW axis
-#define SERVO_CHUTE_PIN    3      // parachute release servo
+#define SERVO_PITCH_PIN    D6     // gimbal servo for the PITCH axis
+#define SERVO_YAW_PIN      D7     // gimbal servo for the YAW axis
+#define SERVO_CHUTE_PIN    D10    // parachute release servo
 
 // ---------------------------------------------------------------------
 //  2. SERVO CALIBRATION   -   centering (trim) and travel
@@ -22,10 +22,13 @@
 //     rest. US_PER_DEG: how many microseconds move the MOTOR one degree
 //     (measure on the bench; it already includes any linkage ratio).
 // ---------------------------------------------------------------------
-#define SERVO_PITCH_CENTER_US   1500
-#define SERVO_YAW_CENTER_US     1500
-#define SERVO_US_PER_DEG        10.0f   // microseconds per degree of motor deflection
-#define TVC_MAX_DEFLECT_DEG     7.0f    // hard mechanical limit; commands are clamped
+#define SERVO_PITCH_CENTER_DEG  90
+#define SERVO_YAW_CENTER_DEG    90
+#define SERVO_US_PER_DEG        10.3f   // microseconds per degree of motor deflection
+#define TVC_MAX_DEFLECT_DEG     10.0f   // hard mechanical limit; commands are clamped
+// vector cmd -> servo cmd gains
+#define SERVO_ROLL_GAIN         1.0f
+#define SERVO_PITCH_GAIN        1.0f
 
 //  DIRECTION SIGNS. During the bench test (README step 3), if an axis
 //  steers the WRONG way, flip its sign here from +1 to -1.
@@ -64,8 +67,8 @@
 //     Threshold is a raw analogRead count. To convert from volts:
 //        counts = volts / ADC_reference_volts * ADC_max_counts
 // ---------------------------------------------------------------------
-#define LAUNCH_PIN                A0
-#define LAUNCH_THRESHOLD_COUNTS   512
+#define LAUNCH_PIN                A2
+#define LAUNCH_THRESHOLD_COUNTS   400
 
 // ---------------------------------------------------------------------
 //  5. PARACHUTE / DESCENT DETECTION
@@ -93,6 +96,15 @@
 //  7. TELEMETRY  (serial print for debugging / bench testing)
 // ---------------------------------------------------------------------
 #define TELEMETRY_ENABLED   1
-#define TELEMETRY_HZ        20
+#define TELEMETRY_HZ        10
+
+// Additions as of August 4, 2026
+// feedback
+#define SPEAKER_PIN D8
+#define SPEAKER_TONE_FREQ 2730
+
+#define TELEMETRY_RUNTIME_S 45
+// roll, pitch, pid_roll, pid_pitch, altitude (timestamps included by default)
+#define TELEMETRY_MEASUREMENTS 5
 
 #endif // CONFIG_H
