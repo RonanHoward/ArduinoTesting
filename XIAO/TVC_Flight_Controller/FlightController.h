@@ -87,7 +87,7 @@ private:
       _pitchPID.reset();
       _yawPID.reset();
       _state = STATE_ASCENT;
-      tone(SPEAKER_PIN, SPEAKER_TONE_FREQ, 400);
+      // tone(SPEAKER_PIN, SPEAKER_TONE_FREQ, 400);
     }
   }
 

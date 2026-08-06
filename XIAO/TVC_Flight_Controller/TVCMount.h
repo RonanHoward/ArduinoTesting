@@ -29,8 +29,8 @@ public:
     pitchDeg = clampDeflect(pitchDeg);
     yawDeg   = clampDeflect(yawDeg);
 
-    int pDeg = SERVO_PITCH_CENTER_DEG + (int)(SERVO_PITCH_SIGN * pitchDeg);
-    int yDeg = SERVO_YAW_CENTER_DEG   + (int)(SERVO_YAW_SIGN   * yawDeg  );
+    int pDeg = SERVO_PITCH_CENTER_DEG + (int)(SERVO_PITCH_SIGN * pitchDeg * 2.5);
+    int yDeg = SERVO_YAW_CENTER_DEG   + (int)(SERVO_YAW_SIGN   * yawDeg   * 2  );
 
     _pitch.write(pDeg);
     _yaw.write(yDeg);

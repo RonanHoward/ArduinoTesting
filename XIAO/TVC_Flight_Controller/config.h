@@ -11,8 +11,8 @@
 // ---------------------------------------------------------------------
 //  1. SERVO WIRING   -   which board pin each servo signal wire uses
 // ---------------------------------------------------------------------
-#define SERVO_PITCH_PIN    D6     // gimbal servo for the PITCH axis
-#define SERVO_YAW_PIN      D7     // gimbal servo for the YAW axis
+#define SERVO_PITCH_PIN    D7     // gimbal servo for the PITCH axis
+#define SERVO_YAW_PIN      D6     // gimbal servo for the YAW axis
 #define SERVO_CHUTE_PIN    D10    // parachute release servo
 
 // ---------------------------------------------------------------------
@@ -47,11 +47,11 @@
 //     Tune order: raise KP until it responds, add KD to damp wobble,
 //     add a little KI last to remove a steady lean.
 // ---------------------------------------------------------------------
-#define PITCH_KP   0.20f
+#define PITCH_KP   0.40f
 #define PITCH_KI   0.00f
 #define PITCH_KD   0.05f
 
-#define YAW_KP     0.20f
+#define YAW_KP     0.40f
 #define YAW_KI     0.00f
 #define YAW_KD     0.05f
 
