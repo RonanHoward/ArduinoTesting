@@ -102,8 +102,10 @@
 #define SPEAKER_PIN D8
 #define SPEAKER_TONE_FREQ 2730
 
-#define TELEMETRY_RUNTIME_S 45
-// roll, pitch, pid_roll, pid_pitch, altitude (timestamps included by default)
-#define TELEMETRY_MEASUREMENTS 5
+// For early flight purposes:
+// How long the controller assumes the rocket is ascending (seconds)
+#define DEBUG_ASCENT_TIME_S 50
+
+#define TELEMETRY_LOG_FREQ_HZ 10
 
 #endif // CONFIG_H

@@ -23,7 +23,7 @@
 #include "PID.h"
 #include "TVCMount.h"
 #include "Parachute.h"
-#include "Telemetry.h"
+#include "Telemetrylog.h"
 
 enum FlightState { STATE_PREFLIGHT, STATE_ASCENT, STATE_DESCENT, STATE_LANDED, STATE_ERROR };
 
@@ -33,7 +33,7 @@ public:
     : _state(STATE_PREFLIGHT),
       _pitchPID(PITCH_KP, PITCH_KI, PITCH_KD, PID_OUTPUT_LIMIT_DEG),
       _rollPID(ROLL_KP, ROLL_KI, ROLL_KD, PID_OUTPUT_LIMIT_DEG),
-      _launchTime(0), _lastTelem(0), _lastBaro(0) {}
+      _launchTime(0), _lastBaro(0) {}
 
   // One-time startup. Call from setup().
   void begin() {
@@ -49,18 +49,27 @@ public:
     float p, t;         // capture pad pressure as the altitude zero
     if (readBaroNow(p, t)) _chute.setGroundPressure(p);
 
+    if (!_telemetryLog.begin()) { _state = STATE_ERROR; return; }
+
     _state = STATE_PREFLIGHT;
   }
 
   // Call every loop().
   void update() {
     switch (_state) {
-      case STATE_PREFLIGHT: preflight();  break;
+      case STATE_PREFLIGHT:
+        preflight();
+        _telemetryLog.poll();
+        break;
       case STATE_ASCENT:    ascent();     break;
       case STATE_DESCENT:   descent();    break;
-      case STATE_LANDED:    landed();     break;
+      case STATE_LANDED:
+        landed();
+        _telemetryLog.poll();
+        break;
       case STATE_ERROR:     errorState(); break;
     }
+    
   }
 
   FlightState state() { return _state; }
@@ -71,8 +80,8 @@ private:
   PID _pitchPID, _rollPID;
   TVCMount _tvc;
   Parachute _chute;
-  unsigned long _launchTime, _lastTelem, _lastBaro, _lastTelemPrint;
-  TelemetryClass _telemetry;
+  TelemetryLog _telemetryLog;
+  unsigned long _launchTime, _lastBaro, _lastTelemLog;
   float _pitchCmd = 0.0f;
   float _rollCmd = 0.0f;
 
@@ -103,9 +112,15 @@ private:
 
     serviceBaro();  // ~25 Hz altitude/apogee tracking
 
+    // Automatically advance to next flight state after set time (FOR CURRENT FLIGHTS)
+    if (millis() - _launchTime >= DEBUG_ASCENT_TIME_S * 1000) {
+      _state = STATE_DESCENT;
+    }
+
     // if (_chute.shouldDeploy(millis() - _launchTime)) {
     //   _state = STATE_DESCENT;
     // }
+
     telemetry();
   }
 
@@ -117,10 +132,7 @@ private:
   }
 
   void landed() {
-    if (millis() - _lastTelemPrint >= 10000) {
-      _telemetry.print_logs();
-      _lastTelemPrint = millis();
-    }
+    _telemetryLog.flush();
   }
 
   void errorState() {
@@ -156,23 +168,16 @@ private:
   // ------------- telemetry -------------
   void telemetry() {
 #if TELEMETRY_ENABLED
-    if (millis() - _lastTelem >= (1000 / TELEMETRY_HZ)) {
-      _lastTelem = millis();
-      _telemetry.log(
-        millis() / 1000.0f,
-        _est.pitch(),
-        _est.roll(),
-        _pitchCmd,
-        _rollCmd,
-        _chute.altitude()
-      );
-      // Serial.print("state:");  Serial.print((int)_state);
-      // Serial.print(" roll:"); Serial.print(_est.roll(), 1);
-      // Serial.print(" pitch:");   Serial.print(_est.pitch(), 1);
-      // Serial.print(" alt:");   Serial.print(_chute.altitude(), 1);
-      // Serial.print(" apogee:");Serial.print(_chute.apogee(), 1);
-      // Serial.println();
+    if (millis() - _lastTelemLog >= 1000 / TELEMETRY_LOG_FREQ_HZ) {
+      _telemetryLog.log(_est.roll(), _est.pitch(), _rollCmd, _pitchCmd, _chute.altitude());
+      _lastTelemLog = millis();
     }
+    // Serial.print("state:");  Serial.print((int)_state);
+    // Serial.print(" roll:"); Serial.print(_est.roll(), 1);
+    // Serial.print(" pitch:");   Serial.print(_est.pitch(), 1);
+    // Serial.print(" alt:");   Serial.print(_chute.altitude(), 1);
+    // Serial.print(" apogee:");Serial.print(_chute.apogee(), 1);
+    // Serial.println();
 #endif
   }
 
