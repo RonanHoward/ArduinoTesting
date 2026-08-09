@@ -32,7 +32,7 @@ public:
   FlightController()
     : _state(STATE_PREFLIGHT),
       _pitchPID(PITCH_KP, PITCH_KI, PITCH_KD, PID_OUTPUT_LIMIT_DEG),
-      _yawPID(YAW_KP, YAW_KI, YAW_KD, PID_OUTPUT_LIMIT_DEG),
+      _rollPID(ROLL_KP, ROLL_KI, ROLL_KD, PID_OUTPUT_LIMIT_DEG),
       _launchTime(0), _lastTelem(0), _lastBaro(0) {}
 
   // One-time startup. Call from setup().
@@ -68,7 +68,7 @@ public:
 private:
   FlightState _state;
   AttitudeEstimator _est;
-  PID _pitchPID, _yawPID;
+  PID _pitchPID, _rollPID;
   TVCMount _tvc;
   Parachute _chute;
   unsigned long _launchTime, _lastTelem, _lastBaro, _lastTelemPrint;
@@ -85,7 +85,7 @@ private:
       _launchTime = millis();
       _est.resetOrientation();           // launch attitude becomes "vertical"
       _pitchPID.reset();
-      _yawPID.reset();
+      _rollPID.reset();
       _state = STATE_ASCENT;
       // tone(SPEAKER_PIN, SPEAKER_TONE_FREQ, 400);
     }
@@ -97,7 +97,7 @@ private:
       float dt = _est.lastDt();
       // Setpoint 0 = keep the launch attitude (stay vertical).
       _pitchCmd = _pitchPID.update(0.0f, PITCH_AXIS_SIGN * _est.pitch(), dt);
-      _rollCmd  = _yawPID.update  (0.0f, YAW_AXIS_SIGN   * _est.roll(),  dt);
+      _rollCmd  = _rollPID.update (0.0f, ROLL_AXIS_SIGN   * _est.roll(),  dt);
       _tvc.command(_pitchCmd, _rollCmd);
     }
 

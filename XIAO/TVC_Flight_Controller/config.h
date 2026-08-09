@@ -12,7 +12,7 @@
 //  1. SERVO WIRING   -   which board pin each servo signal wire uses
 // ---------------------------------------------------------------------
 #define SERVO_PITCH_PIN    D7     // gimbal servo for the PITCH axis
-#define SERVO_YAW_PIN      D6     // gimbal servo for the YAW axis
+#define SERVO_ROLL_PIN     D6    // gimbal servo for the ROLL axis
 #define SERVO_CHUTE_PIN    D10    // parachute release servo
 
 // ---------------------------------------------------------------------
@@ -23,37 +23,36 @@
 //     (measure on the bench; it already includes any linkage ratio).
 // ---------------------------------------------------------------------
 #define SERVO_PITCH_CENTER_DEG  90
-#define SERVO_YAW_CENTER_DEG    90
+#define SERVO_ROLL_CENTER_DEG   90
 #define SERVO_US_PER_DEG        10.3f   // microseconds per degree of motor deflection
 #define TVC_MAX_DEFLECT_DEG     10.0f   // hard mechanical limit; commands are clamped
 // vector cmd -> servo cmd gains
 #define SERVO_ROLL_GAIN         1.0f
 #define SERVO_PITCH_GAIN        1.0f
 
-//  DIRECTION SIGNS. During the bench test (README step 3), if an axis
-//  steers the WRONG way, flip its sign here from +1 to -1.
-#define SERVO_PITCH_SIGN   (+1)
-#define SERVO_YAW_SIGN     (+1)
+//  DIRECTION SIGNS
+#define SERVO_PITCH_SIGN   (-1)
+#define SERVO_ROLL_SIGN    (+1)
 
-//  PARACHUTE servo positions (microseconds).
+//  PARACHUTE servo positions (microseconds)
 #define CHUTE_STOWED_US    1000    // holds the chute closed on the pad
 #define CHUTE_DEPLOYED_US  2000    // releases the chute
 
 // ---------------------------------------------------------------------
-//  3. PID GAINS   -   the heart of tuning. START SMALL.
+//  3. PID GAINS
 //     One controller per CONTROLLABLE axis. A 2-servo gimbal can steer
-//     PITCH and YAW (tilt) only. ROLL cannot be corrected by thrust
+//     PITCH and ROLL (tilt) only. YAW cannot be corrected by thrust
 //     vectoring, so there is intentionally no roll controller.
 //     Tune order: raise KP until it responds, add KD to damp wobble,
 //     add a little KI last to remove a steady lean.
 // ---------------------------------------------------------------------
 #define PITCH_KP   0.40f
 #define PITCH_KI   0.00f
-#define PITCH_KD   0.05f
+#define PITCH_KD   0.1f
 
-#define YAW_KP     0.40f
-#define YAW_KI     0.00f
-#define YAW_KD     0.05f
+#define ROLL_KP     0.40f
+#define ROLL_KI     0.00f
+#define ROLL_KD     0.1f
 
 //  Largest vector angle the PID is allowed to ask for (degrees).
 //  Keep this at or below the gimbal's mechanical limit.
@@ -90,7 +89,7 @@
 //  Advanced: if the flight computer is mounted so a control axis reads
 //  reversed, flip these instead of rewiring. Try the servo signs first.
 #define PITCH_AXIS_SIGN   (+1)
-#define YAW_AXIS_SIGN     (+1)
+#define ROLL_AXIS_SIGN    (+1)
 
 // ---------------------------------------------------------------------
 //  7. TELEMETRY  (serial print for debugging / bench testing)

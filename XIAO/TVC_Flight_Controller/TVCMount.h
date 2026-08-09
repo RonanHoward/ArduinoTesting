@@ -18,29 +18,29 @@ class TVCMount {
 public:
   void begin() {
     _pitch.attach(SERVO_PITCH_PIN);
-    _yaw.attach(SERVO_YAW_PIN);
+    _roll.attach(SERVO_ROLL_PIN);
     center();
   }
 
   void center() { command(0.0f, 0.0f); }
 
   // pitchDeg / yawDeg: desired motor deflection angles from the PID.
-  void command(float pitchDeg, float yawDeg) {
+  void command(float pitchDeg, float rollDeg) {
     pitchDeg = clampDeflect(pitchDeg);
-    yawDeg   = clampDeflect(yawDeg);
+    rollDeg   = clampDeflect(rollDeg);
 
     int pDeg = SERVO_PITCH_CENTER_DEG + (int)(SERVO_PITCH_SIGN * pitchDeg * 2.5);
-    int yDeg = SERVO_YAW_CENTER_DEG   + (int)(SERVO_YAW_SIGN   * yawDeg   * 2  );
+    int yDeg = SERVO_ROLL_CENTER_DEG  + (int)(SERVO_ROLL_SIGN  * rollDeg  * 2  );
 
     _pitch.write(pDeg);
-    _yaw.write(yDeg);
+    _roll.write(yDeg);
   }
 
   // Relax the servos (e.g. after the chute is out).
-  void detach() { _pitch.detach(); _yaw.detach(); }
+  void detach() { _pitch.detach(); _roll.detach(); }
 
 private:
-  Servo _pitch, _yaw;
+  Servo _pitch, _roll;
 
   float clampDeflect(float a) {
     if (a >  TVC_MAX_DEFLECT_DEG) return  TVC_MAX_DEFLECT_DEG;
