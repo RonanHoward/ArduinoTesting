@@ -174,7 +174,7 @@ public:
     if (_next + _bufCount >= _capacity)   { _dropped++; return false; }
     if (_bufCount >= TLOG_BUFFER_RECORDS) { _dropped++; return false; }
 
-    if (t_ms == TLOG_EMPTY_T) t_ms = TLOG_EMPTY_T - 1;  /* never look empty */
+    // if (t_ms == TLOG_EMPTY_T) t_ms = TLOG_EMPTY_T - 1;  /* never look empty */
 
     TlogRecord &r = _buf[_bufCount];
     r.t_ms     = t_ms;
