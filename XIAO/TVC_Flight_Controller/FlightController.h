@@ -132,7 +132,7 @@ private:
   }
 
   void landed() {
-    _telemetryLog.flush();
+    _telemetryLog.commit();
   }
 
   void errorState() {
@@ -168,16 +168,11 @@ private:
   // ------------- telemetry -------------
   void telemetry() {
 #if TELEMETRY_ENABLED
-    if (millis() - _lastTelemLog >= 1000 / TELEMETRY_LOG_FREQ_HZ) {
+    unsigned long telem_loop_now = millis();
+    if (telem_loop_now - _lastTelemLog >= 1000 / TELEMETRY_LOG_FREQ_HZ) {
       _telemetryLog.log(_est.roll(), _est.pitch(), _rollCmd, _pitchCmd, _chute.altitude());
-      _lastTelemLog = millis();
+      _lastTelemLog = telem_loop_now;
     }
-    // Serial.print("state:");  Serial.print((int)_state);
-    // Serial.print(" roll:"); Serial.print(_est.roll(), 1);
-    // Serial.print(" pitch:");   Serial.print(_est.pitch(), 1);
-    // Serial.print(" alt:");   Serial.print(_chute.altitude(), 1);
-    // Serial.print(" apogee:");Serial.print(_chute.apogee(), 1);
-    // Serial.println();
 #endif
   }
 

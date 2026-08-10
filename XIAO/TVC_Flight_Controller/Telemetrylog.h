@@ -90,7 +90,7 @@
  * block = the sweet spot.  Set to 1 to write through immediately (slower loop,
  * more flash wear, but nothing is lost on a brownout). */
 #ifndef TLOG_BUFFER_RECORDS
-#define TLOG_BUFFER_RECORDS 4
+#define TLOG_BUFFER_RECORDS 508
 #endif
 
 /* Byte offset of the log region inside EEPROM.  Raise it if the flight code
@@ -171,7 +171,8 @@ public:
   /* Full form: explicit timestamp and the spare column. */
   bool log(uint32_t t_ms, float roll, float pitch, float pidRoll,
            float pidPitch, float altitude, float aux = 0.0f) {
-    if (_next + _bufCount >= _capacity) { _dropped++; return false; }
+    if (_next + _bufCount >= _capacity)   { _dropped++; return false; }
+    if (_bufCount >= TLOG_BUFFER_RECORDS) { _dropped++; return false; }
 
     if (t_ms == TLOG_EMPTY_T) t_ms = TLOG_EMPTY_T - 1;  /* never look empty */
 
@@ -184,8 +185,6 @@ public:
     r.alt      = quantize(altitude, TLOG_ALT_SCALE);
     r.aux      = quantize(aux,      TLOG_SCALE);
     _bufCount++;
-
-    if (_bufCount >= TLOG_BUFFER_RECORDS) return flush();
     return true;
   }
 
@@ -196,8 +195,8 @@ public:
     if (_bufCount == 0) return true;
 
     uint32_t t0 = micros();
-    uint8_t  n  = _bufCount;
-    for (uint8_t i = 0; i < n; i++) {
+    uint16_t  n  = _bufCount;
+    for (uint16_t i = 0; i < n; i++) {
       writeRaw(recordAddr(_next + i), &_buf[i], sizeof(TlogRecord));
     }
     _lastWriteUs = micros() - t0;
@@ -206,6 +205,8 @@ public:
     _bufCount = 0;
     return true;
   }
+
+  bool commit() { return flush(); }
 
   /* ---- erasing ---- */
 
@@ -358,7 +359,7 @@ public:
 private:
   uint16_t   _capacity;
   uint16_t   _next;                    /* next free slot in flash */
-  uint8_t    _bufCount;                /* records staged in RAM */
+  uint16_t   _bufCount;                /* records staged in RAM */
   uint16_t   _dropped;
   uint32_t   _lastWriteUs;
   bool       _pendingErase;
